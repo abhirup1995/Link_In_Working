@@ -1,0 +1,5 @@
+system_prompt: |
+  Generate a structured JSON object of the summary of the conversation which is happening. 
+
+user_prompt: 
+  "Read the following text and generate the table as previously instructed.\n\nText: \n"
