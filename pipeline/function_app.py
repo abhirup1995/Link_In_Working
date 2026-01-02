@@ -169,7 +169,44 @@ def process_blob(context):
     }
 
     aoai_output = yield context.call_activity("callAoai", call_aoai_input)
-    
+        
+    import json
+
+    def update_total_score_pretty(aoai_output_str: str) -> str:
+        """
+        Updates only metadata.total_score in the AOAI JSON string output.
+        Returns a pretty-printed JSON string, keeping everything else intact.
+        """
+        try:
+            scorecard = json.loads(aoai_output_str)
+        except json.JSONDecodeError:
+            # If invalid JSON, return as-is
+            return aoai_output_str
+
+        total = 0.0
+        for section in scorecard.get("sections", []):
+            for question in section.get("questions", []):
+                points = question.get("points_earned", 0)
+                try:
+                    total += float(points)
+                except (ValueError, TypeError):
+                    continue
+
+        # Update only total_score
+        if "metadata" in scorecard:
+            scorecard["metadata"]["total_score"] = total
+
+        # Return a nicely formatted JSON string
+        return json.dumps(scorecard, indent=2)
+
+
+    logging.info(f"AOAI Output: {aoai_output}")
+
+    aoai_output = update_total_score_pretty(aoai_output)
+
+    # aoai_output = recalc_total_score(aoai_output)
+
+    logging.info(f"Recalculated AOAI Output: {aoai_output}")
 
     # 3. Write AOAI output to Blob Storage
     task_result = yield context.call_activity(

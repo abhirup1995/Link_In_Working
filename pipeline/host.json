@@ -2,12 +2,12 @@
   "version": "2.0",
   "logging": {
     "logLevel": {
-      "default": "Warning",
+      "default": "Information",
       "Host.Aggregator": "Error",
       "Host.Results": "Error",
       "Function": "Information",
-      "DurableTask": "Warning",
-      "Worker": "Warning"
+      "DurableTask": "Information",
+      "Worker": "Information"
     },
     "applicationInsights": {
       "samplingSettings": {
