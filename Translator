@@ -184,41 +184,59 @@ Would you like me to scan the exact function signatures in your speechToText.py 
 My Updated Code: 
 
 
+
+import requests
+import logging
+import re
+from configuration import Configuration
+
 def translate_to_english(text: str, config: Configuration) -> str:
+    """
+    Translate text to English using Azure Translator Text API.
+    Handles mixed languages by letting Translator auto-detect source language.
+    Returns original text on failure.
+    """
+    if not text or not text.strip():
+        return ""
+
+    endpoint = (config.get_value("TRANSLATOR_ENDPOINT") or "").rstrip("/")
+    key = config.get_value("TRANSLATOR_KEY")
+    region = config.get_value("TRANSLATOR_REGION")
+
+    if not endpoint or not key or not region:
+        return text  # don't break pipeline
+
+    # Split into sentence-like chunks so mixed-language is handled better
+    chunks = [c.strip() for c in re.split(r'(?<=[.!?])\s+', text.strip()) if c.strip()]
+    if not chunks:
+        chunks = [text.strip()]
+
+    url = f"{endpoint}/translate?api-version=3.0&to=en"
+    headers = {
+        "Ocp-Apim-Subscription-Key": key,
+        "Ocp-Apim-Subscription-Region": region,
+        "Content-Type": "application/json",
+    }
+    body = [{"text": c} for c in chunks]
+
     try:
-        endpoint = config.get_value("TRANSLATOR_ENDPOINT").rstrip("/")
-        key = config.get_value("TRANSLATOR_KEY")
-        region = config.get_value("TRANSLATOR_REGION")
-
-        # If translator config is missing, return original
-        if not endpoint or not key or not region or not text:
-            return text
-
-        url = f"{endpoint}/translate?api-version=3.0&to=en"
-        headers = {
-            "Ocp-Apim-Subscription-Key": key,
-            "Ocp-Apim-Subscription-Region": region,
-            "Content-Type": "application/json",
-        }
-        body = [{"text": text}]
-
-        resp = requests.post(url, headers=headers, json=body, timeout=(5, 30))
+        resp = requests.post(url, headers=headers, json=body, timeout=(5, 60))
         resp.raise_for_status()
         data = resp.json()
 
-        return data[0].get("translations", [{}])[0].get("text", text)
+        # Each item corresponds to each input chunk
+        translated_chunks = []
+        for i, item in enumerate(data):
+            translated_chunks.append(
+                (item.get("translations", [{}])[0].get("text")) or chunks[i]
+            )
+
+        return " ".join(translated_chunks).strip()
     except Exception:
-        logging.exception("Translator call failed; returning original text")
+        logging.exception("Translator translate failed; returning original text")
         return text
 
 
 
-
-langcode = (detected_language or "").lower()
-
-# Translate ONLY when NOT English
-if langcode.startswith("en"):
-    return full_text
-else:
-    translated_text = translate_to_english(full_text, config)
-    return translated_text
+english_text = translate_to_english(full_text, config)
+return english_text
