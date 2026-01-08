@@ -1,0 +1,24 @@
+
+def translate_to_english(text: str, config: Configuration) -> str:
+    url = (
+        f"{config.get_value('TRANSLATOR_ENDPOINT')}"
+        "/translate?api-version=3.0&to=en"
+    )
+
+    headers = {
+        "Ocp-Apim-Subscription-Key": config.get_value("TRANSLATOR_KEY"),
+        "Ocp-Apim-Subscription-Region": config.get_value("TRANSLATOR_REGION"),
+        "Content-Type": "application/json"
+    }
+
+    body = [{"text": text}]
+
+    resp = requests.post(url, headers=headers, json=body, timeout=(5, 30))
+    resp.raise_for_status()
+
+    return resp.json()[0]["translations"][0]["text"]
+
+
+
+if detected_language.startswith("es"):
+    english_text = translate_to_english(full_text, config)
