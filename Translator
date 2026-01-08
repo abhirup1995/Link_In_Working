@@ -171,9 +171,54 @@ if detectedlanguage.startswith("es"):
  
 To broaden beyond Spanish, use:
  
-if not detectedlanguage.startswith("en"):
+if not detectedlanguage.startswith("en"): 
     englishtext = translatetoenglish(fulltext, config)
 else:
     englishtext = full_text
  
 Would you like me to scan the exact function signatures in your speechToText.py and produce a precise patch (diff) tailored to those names and flow? If you paste or confirm the variables (e.g., result.text, full_text, detected_language, config object), I’ll generate a clean diff you can drop in.
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------
+My Updated Code: 
+
+
+def translate_to_english(text: str, config: Configuration) -> str:
+    try:
+        endpoint = config.get_value("TRANSLATOR_ENDPOINT").rstrip("/")
+        key = config.get_value("TRANSLATOR_KEY")
+        region = config.get_value("TRANSLATOR_REGION")
+
+        # If translator config is missing, return original
+        if not endpoint or not key or not region or not text:
+            return text
+
+        url = f"{endpoint}/translate?api-version=3.0&to=en"
+        headers = {
+            "Ocp-Apim-Subscription-Key": key,
+            "Ocp-Apim-Subscription-Region": region,
+            "Content-Type": "application/json",
+        }
+        body = [{"text": text}]
+
+        resp = requests.post(url, headers=headers, json=body, timeout=(5, 30))
+        resp.raise_for_status()
+        data = resp.json()
+
+        return data[0].get("translations", [{}])[0].get("text", text)
+    except Exception:
+        logging.exception("Translator call failed; returning original text")
+        return text
+
+
+
+
+langcode = (detected_language or "").lower()
+
+# Translate ONLY when NOT English
+if langcode.startswith("en"):
+    return full_text
+else:
+    translated_text = translate_to_english(full_text, config)
+    return translated_text
