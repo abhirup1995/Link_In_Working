@@ -54,22 +54,40 @@ def run(blob_input: dict):
             "Authorization": f"Bearer {token}",
         }
 
-        payload = {
-            "displayName": "Transcription",
-            "locale": "en-US",
-            "contentUrls": [blob_uri], #
-            "properties": {
-                "wordLevelTimestampsEnabled": False,
-                "displayFormWordLevelTimestampsEnabled": False,
-                "punctuationMode": "DictatedAndAutomatic",
-                "profanityFilterMode": "Masked",
-                "timeToLiveHours": 48
-            }
-        }
-
+        # payload = {
+        #     "displayName": "Transcription",
+        #     "locale": "en-US",
+        #     "contentUrls": [blob_uri], #
+        #     "properties": {
+        #         "wordLevelTimestampsEnabled": False,
+        #         "displayFormWordLevelTimestampsEnabled": False,
+        #         "punctuationMode": "DictatedAndAutomatic",
+        #         "profanityFilterMode": "Masked",
+        #         "timeToLiveHours": 48
+        #     }
+        # }
+        payload = { "displayName": f"Transcription - {blob_name}", "contentUrls": [blob_uri], 
+                    # "locale": "en-US",  # required, choose any default locale
+                    "locale": "es-US",  # required, choose any default locale
+                    # "locale": "multi-language",  
+                    "properties": { "languageIdentification": { "candidateLocales": ["en-US", "es-US"] }, 
+                    "punctuationMode": "DictatedAndAutomatic", "profanityFilterMode": "Masked", 
+                    "timeToLiveHours": 48 } }
+        
+        logging.info(f"URL: {url}")
         logging.info(f"Submitting transcription request for blob: {blob_name} in container: {container} with payload: {payload}")
         response = requests.post(url, json=payload, headers=headers)
-        transcription_url = response.json()['self']
+        
+
+        resp_json = response.json()
+        logging.info(f"Transcription submission response: {resp_json}")
+        # transcription_url = resp_json.get('links', {}).get('self')
+        transcription_url = resp_json.get('self') or resp_json.get('links', {}).get('self')
+        if not transcription_url:
+            logging.error(f"Transcription request failed: {resp_json}")
+            return f"Error submitting transcription: {resp_json}"
+        
+        # transcription_url = response.json()['self']
 
         # Wait for completion
         final_status = wait_for_transcription(transcription_url, headers)
