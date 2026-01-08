@@ -19,6 +19,161 @@ def translate_to_english(text: str, config: Configuration) -> str:
     return resp.json()[0]["translations"][0]["text"]
 
 
-
 if detected_language.startswith("es"):
     english_text = translate_to_english(full_text, config)
+
+----------------------------------------------------------------------------------------------------------------
+Pranal: 
+
+Got it — since you’re looking at the current page (speechToText.py), let’s add the translation-to-English step right after your speech transcription completes, using your provided function. I’ll show you:
+a drop‑in translate_to_english(...) helper (exactly as you shared, with small robustness tweaks),
+where to call it in your existing flow, and
+a safe fallback pattern if language detection isn’t present yet.
+1) Helper: translate_to_english(...)
+Add this near the top of speechToText.py (with your other imports):
+ 
+import requests
+from typing import Optional
+ 
+Then add the function (I’ve kept your logic and added minor guards):
+ 
+def translatetoenglish(text: str, config) -> str:
+    """
+    Translate arbitrary text to English using Azure Translator Text API.
+    Expects config to provide TRANSLATORENDPOINT, TRANSLATORKEY, TRANSLATORREGION.
+    """
+    if not text:
+        return ""
+
+
+    endpoint = config.getvalue("TRANSLATORENDPOINT")
+    key = config.getvalue("TRANSLATORKEY")
+    region = config.getvalue("TRANSLATORREGION")
+ 
+    if not endpoint or not key or not region:
+        # If any of the translator parameters are missing, just return original text
+        return text
+ 
+    url = f"{endpoint}/translate?api-version=3.0&to=en"
+ 
+    headers = {
+        "Ocp-Apim-Subscription-Key": key,
+        "Ocp-Apim-Subscription-Region": region,
+        "Content-Type": "application/json",
+    }
+ 
+    body = [{"text": text}]
+ 
+    try:
+        resp = requests.post(url, headers=headers, json=body, timeout=(5, 30))
+        resp.raisefor_status()
+        data = resp.json()
+        # Defensive parsing
+        return (
+            data[0]
+            .get("translations", [{}])[0]
+            .get("text", text)
+        )
+    except Exception:
+        # On any failure, fall back to original text
+        return text
+ 
+Note: This expects you already have a config object with .get_value(...). If your file uses environment variables directly, replace config.get_value(...) with os.getenv(...).
+2) Where to call it: right after transcription
+Below is a typical pattern after you complete the Speech-to-Text step. Adapt it to your variables (e.g., full_text, detected_language, result.text).
+If you already have detected_language
+ 
+# After your speech transcribe completes and you have fulltext and detectedlanguage:
+fulltext = resulttext  # whatever variable holds the assembled transcript
+# Example: detectedlanguage from Azure Speech result or your own detector
+# detectedlanguage could be like 'en-US', 'es-ES', 'hi-IN', etc.
+ 
+langcode = (detectedlanguage or "").lower()
+ 
+# Translate iff not English
+if not langcode.startswith("en"):
+    englishtext = translatetoenglish(fulltext, config)
+else:
+    englishtext = fulltext
+
+
+# Continue your pipeline with englishtext
+return english_text
+ 
+If you do not have language detection yet
+You can defensively translate only when text likely contains non‑English tokens. A simple heuristic:
+ 
+def probablyenglish(s: str) -> bool:
+    # Very simple heuristic: if most characters are ascii and we see common English letters
+    # Replace with a proper language detection if needed
+    if not s:
+        return True
+    asciiratio = sum(1 for c in s if ord(c) < 128) / max(1, len(s))
+    return asciiratio > 0.9
+ 
+# After transcription:
+fulltext = resulttext
+
+
+if not probablyenglish(fulltext):
+    englishtext = translatetoenglish(fulltext, config)
+else:
+    englishtext = fulltext
+
+
+return englishtext
+ 
+3) Example integrated block
+This shows a compact “transcribe → normalize → translate” flow. Replace the transcription part with your actual code:
+ 
+def transcribeandtranslate(audiopath: str, config):
+    # --- 1) Transcribe (your existing logic) ---
+    # resulttext, detectedlanguage = yourspeechtranscribe(audiopath, …)
+    # For example:
+    # result = speechrecognizer.recognizeonce()
+    # resulttext = result.text
+    # detectedlanguage = getattr(result, "language", None)  # depends on SDK
+ 
+    resulttext = fulltext  # use your variable
+    detectedlanguage = detectedlanguage  # use your variable
+ 
+    # --- 2) Translate to English if needed ---
+    langcode = (detectedlanguage or "").lower()
+    if langcode and not langcode.startswith("en"):
+        englishtext = translatetoenglish(resulttext, config)
+    else:
+        # If no detection available, optionally apply heuristic
+        if not langcode and not probablyenglish(resulttext):
+            englishtext = translatetoenglish(resulttext, config)
+        else:
+            englishtext = resulttext
+ 
+    # --- 3) Return / pass along ---
+    return {
+        "originaltext": resulttext,
+        "language": detectedlanguage or "unknown",
+        "englishtext": englishtext,
+    }
+ 
+4) Configuration requirements
+Ensure these are available via your config or environment:
+TRANSLATOR_ENDPOINT → e.g., https://<your-resource-name>.cognitiveservices.azure.com
+TRANSLATOR_KEY → Azure Translator Text key
+TRANSLATOR_REGION → region of your Translator resource (e.g., global, eastus, etc.)
+5) Notes on Azure SDK language detection (optional)
+If you’re using Azure Speech SDK, language detection can be configured via AutoDetectSourceLanguageConfig for multi-language scenarios; otherwise speech_config.speech_recognition_language = "xx-XX" is fixed.
+If you add auto‑detect, you’ll get a language result per segment or final result; feed that into detected_language above.
+6) Minimal patch you asked for
+If your current code already has full_text and detected_language, you can keep it exactly as you wrote:
+ 
+if detectedlanguage.startswith("es"):
+    englishtext = translatetoenglish(full_text, config)
+ 
+To broaden beyond Spanish, use:
+ 
+if not detectedlanguage.startswith("en"):
+    englishtext = translatetoenglish(fulltext, config)
+else:
+    englishtext = full_text
+ 
+Would you like me to scan the exact function signatures in your speechToText.py and produce a precise patch (diff) tailored to those names and flow? If you paste or confirm the variables (e.g., result.text, full_text, detected_language, config object), I’ll generate a clean diff you can drop in.
