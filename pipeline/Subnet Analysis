@@ -1,0 +1,74 @@
+1. Existing Subnets (from screenshot)
+Name	IP Range	Notes
+subnet-ag-ase-qa-01	192.168.3.0/24	Application Gateway?
+subnet-ml-ase-qa-01	192.168.4.0/24	ML workloads
+subnet-sa-ase-qa-01	192.168.5.0/24	Storage/Service
+subnet-vk-ase-qa-01	192.168.6.0/24	Virtual network?
+subnet-dns-ase-qa-01	192.168.1.0/24	DNS delegated
+subnet-ase-qa-01	192.168.0.0/24	App subnet, NSG applied
+subnet-rc-ase-qa-01	192.168.7.0/24	Resource Controller?
+subnet-db-ase-qa-01	192.168.8.0/24	DB?
+AzureFirewallSubnet	192.168.9.0/26	Firewall
+AzureFirewallManage…	192.168.10.0/26	Firewall Management
+GatewaySubnet	192.168.2.0/24	VPN / Gateway
+Subnet-ai-qa-01	192.168.50.0/24	AI workloads
+
+Note: There are some /24 and /26 subnets, with overlapping function names compared to your code.
+
+2. Planned Subnets in Your Code
+Subnet	Planned Range	Current Status
+agentSubnetPrefix	192.168.0.0/24	Exists: subnet-ase-qa-01 (can reuse)
+acaEnvironmentSubnetPrefix	192.168.1.0/24	Exists: subnet-dns-ase-qa-01 (maybe reuse if purpose aligns, otherwise need new)
+peSubnetPrefix	192.168.2.0/26	Not available: GatewaySubnet exists at 192.168.2.0/24 → cannot reuse. Need new /26.
+azureBastionSubnetPrefix	192.168.2.64/26	Overlaps GatewaySubnet. Needs new /26.
+azureFirewallSubnetPrefix	192.168.2.128/26	Overlaps GatewaySubnet. Needs new /26.
+gatewaySubnetPrefix	192.168.2.192/26	Overlaps GatewaySubnet /24. Cannot reuse.
+azureAppGatewaySubnetPrefix	192.168.3.0/27	subnet-ag-ase-qa-01 exists at /24 → could use smaller range inside existing /24 or allocate new /27.
+apimSubnetPrefix	192.168.3.32/27	Part of subnet-ag-ase-qa-01 /24. Could allocate from there.
+jumpboxSubnetPrefix	192.168.3.64/27	Part of subnet-ag-ase-qa-01 /24. Could allocate from there.
+devopsBuildAgentsSubnetPrefix	192.168.3.96/27	Part of subnet-ag-ase-qa-01 /24. Could allocate from there.
+3. Reuse Summary
+
+✅ agentSubnetPrefix (192.168.0.0/24) → can reuse subnet-ase-qa-01.
+
+⚠️ acaEnvironmentSubnetPrefix (192.168.1.0/24) → currently subnet-dns-ase-qa-01. Only reuse if purpose matches. Otherwise, pick new /24.
+
+❌ Private Endpoints (/26), Bastion (/26), Firewall (/26), Gateway (/26) → overlap existing 192.168.2.0/24 → must allocate new ranges.
+
+⚠️ Application Gateway, APIM, Jumpbox, DevOps Build Agents → inside 192.168.3.0/24. Can carve smaller /27 subnets from existing /24 or pick new ranges if isolation is preferred.
+
+4. Recommended New IP Ranges
+
+The VNet address space is 192.168.0.0/21 → covers 192.168.0.0 – 192.168.7.255.
+
+Already used in screenshot:
+
+192.168.0.0 – 192.168.1.255 (App + DNS)
+
+192.168.2.0 – 192.168.2.255 (Gateway)
+
+192.168.3.0 – 192.168.3.255 (App GW, etc.)
+
+192.168.4.0 – 192.168.8.0+ (ML, SA, RC, DB, AI)
+
+Available ranges:
+
+192.168.6.0 – 192.168.7.255 → 2 /24 blocks (can carve /26 subnets here for PE, Bastion, Firewall, Gateway).
+
+Suggested assignments:
+
+Subnet	Suggested Range	Notes
+peSubnetPrefix	192.168.6.0/26	64 IPs for Private Endpoints
+azureBastionSubnetPrefix	192.168.6.64/26	64 IPs for Bastion
+azureFirewallSubnetPrefix	192.168.6.128/26	64 IPs for Firewall
+gatewaySubnetPrefix	192.168.6.192/26	64 IPs for VPN Gateway
+
+This keeps all new /26 subnets contiguous inside the free 192.168.6.0/24+ space.
+
+For App Gateway, APIM, Jumpbox, DevOps Build Agents:
+
+Option A: Carve from existing 192.168.3.0/24 as /27s
+
+Option B: Move to free range in 192.168.7.0/24 (if strict separation is required).
+
+If you want, I can draw a full subnet allocation diagram showing which subnets are reused, which are new, and how the /21 VNet space is distributed. This will make it crystal clear and avoid overlap errors.
